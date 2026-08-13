@@ -1,0 +1,487 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Controle de Estoque — Vesco</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: { extend: { colors: { brand: {
+      bg: '#05070a', card: '#0b1320', card2: '#0e1626', border: 'rgba(255,255,255,.09)',
+      orange: '#ff8a00', blue: '#0ea5e9', green: '#22c55e', red: '#ef4444', yellow: '#eab308'
+    } } } }
+  };
+</script>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<style>
+  html,body{background:#05070a}
+  ::-webkit-scrollbar{width:8px;height:8px}
+  ::-webkit-scrollbar-thumb{background:rgba(255,255,255,.14);border-radius:99px}
+  .tag-pill{display:inline-flex;align-items:center;gap:4px;border-radius:999px;padding:2px 8px;font-size:10px;font-weight:800}
+  .toast-enter{animation:toastIn .18s ease both}
+  @keyframes toastIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+</style>
+</head>
+<body class="bg-brand-bg text-slate-100 min-h-screen font-sans text-[13px] pb-10">
+
+<header class="sticky top-0 z-40 bg-brand-bg/95 backdrop-blur border-b border-brand-border">
+  <div class="max-w-lg mx-auto px-3 pt-3 pb-2">
+    <div class="flex items-center justify-between gap-2">
+      <div>
+        <h1 class="text-lg font-black tracking-tight leading-none">Estoque <span class="text-brand-orange">Vesco</span></h1>
+        <div class="text-[10px] text-slate-500 font-bold mt-1">Onde cada produto está guardado</div>
+      </div>
+      <button id="btn-operador" class="text-left bg-brand-card border border-brand-border rounded-xl px-3 py-2 min-w-[110px]">
+        <div class="text-[9px] text-slate-500 font-bold uppercase">Operador</div>
+        <div id="operador-nome" class="text-xs font-black truncate max-w-[110px]">Definir</div>
+      </button>
+    </div>
+  </div>
+  <nav class="max-w-lg mx-auto px-3 pb-2 grid grid-cols-3 gap-1.5">
+    <button data-tab="registrar" class="tab-btn min-h-[38px] rounded-xl text-[11px] font-black bg-brand-orange text-black">Registrar</button>
+    <button data-tab="consultar" class="tab-btn min-h-[38px] rounded-xl text-[11px] font-black bg-brand-card text-slate-300 border border-brand-border">Consultar</button>
+    <button data-tab="baixo" class="tab-btn min-h-[38px] rounded-xl text-[11px] font-black bg-brand-card text-slate-300 border border-brand-border">Baixo Estoque</button>
+  </nav>
+</header>
+
+<main class="max-w-lg mx-auto px-3 pt-3 space-y-3">
+
+  <!-- ===== REGISTRAR ===== -->
+  <section id="view-registrar" class="view-panel space-y-3">
+    <div class="bg-brand-card border border-brand-border rounded-xl p-3 space-y-3">
+      <div>
+        <div class="text-[10px] text-slate-500 font-bold uppercase mb-1">SKU / código de barras</div>
+        <div class="flex gap-2">
+          <input id="reg-sku" placeholder="Bipe ou digite o SKU" class="flex-1 bg-black/40 border border-brand-border rounded-xl px-3 py-3 font-black outline-none">
+          <button id="btn-cam-sku" class="px-3 rounded-xl bg-brand-orange text-black font-bold text-xs">📷</button>
+        </div>
+        <div id="reg-conhecido" class="hidden text-[10px] text-sky-300 mt-1"></div>
+      </div>
+
+      <img id="reg-foto" class="hidden w-full max-h-48 object-contain rounded-xl bg-black/30 border border-brand-border" alt="Foto do produto">
+
+      <div>
+        <div class="text-[10px] text-slate-500 font-bold uppercase mb-1">Descrição</div>
+        <input id="reg-desc" placeholder="Descrição do produto" class="w-full bg-black/40 border border-brand-border rounded-xl px-3 py-3 outline-none">
+      </div>
+
+      <div class="grid grid-cols-2 gap-2">
+        <div>
+          <div class="text-[10px] text-slate-500 font-bold uppercase mb-1">Galpão</div>
+          <select id="reg-galpao" class="w-full bg-black/40 border border-brand-border rounded-xl px-3 py-3 font-bold outline-none"></select>
+        </div>
+        <div>
+          <div class="text-[10px] text-slate-500 font-bold uppercase mb-1">Quantidade</div>
+          <input id="reg-qtd" type="number" step="0.01" min="0" class="w-full bg-black/40 border border-brand-border rounded-xl px-3 py-3 text-center font-black outline-none">
+        </div>
+      </div>
+
+      <div>
+        <div class="text-[10px] text-slate-500 font-bold uppercase mb-1">Local (prateleira/endereço)</div>
+        <div class="flex gap-2">
+          <input id="reg-local" placeholder="Ex: A1-03" class="flex-1 bg-black/40 border border-brand-border rounded-xl px-3 py-3 font-bold outline-none">
+          <button id="btn-cam-local" class="px-3 rounded-xl bg-brand-card2 border border-brand-border font-bold text-xs">📷</button>
+        </div>
+      </div>
+
+      <button id="btn-registrar" class="w-full min-h-[52px] rounded-xl bg-brand-green text-black font-black text-sm">✔ Registrar</button>
+    </div>
+
+    <div id="reg-resultado" class="hidden bg-brand-card border border-brand-green/40 rounded-xl p-3"></div>
+  </section>
+
+  <!-- ===== CONSULTAR ===== -->
+  <section id="view-consultar" class="view-panel hidden space-y-3">
+    <div class="bg-brand-card border border-brand-border rounded-xl p-3">
+      <div class="text-[10px] text-slate-500 font-bold uppercase mb-1">Buscar SKU</div>
+      <div class="flex gap-2">
+        <input id="con-sku" placeholder="Bipe ou digite o SKU" class="flex-1 bg-black/40 border border-brand-border rounded-xl px-3 py-3 font-black outline-none">
+        <button id="btn-cam-consulta" class="px-3 rounded-xl bg-brand-orange text-black font-bold text-xs">📷</button>
+      </div>
+      <button id="btn-buscar" class="w-full mt-2 min-h-[44px] rounded-xl bg-brand-blue text-black font-black text-sm">Buscar</button>
+    </div>
+    <div id="con-resultado"></div>
+  </section>
+
+  <!-- ===== BAIXO ESTOQUE ===== -->
+  <section id="view-baixo" class="view-panel hidden space-y-2">
+    <div class="bg-brand-red/10 border border-brand-red/40 rounded-xl p-3 text-[11px] text-red-200">
+      Itens com quantidade abaixo do estoque mínimo definido — lista de compra.
+    </div>
+    <button id="btn-refresh-baixo" class="w-full min-h-[40px] rounded-xl bg-brand-card border border-brand-border font-black text-xs">Atualizar lista</button>
+    <div id="lista-baixo" class="space-y-2"></div>
+  </section>
+
+</main>
+
+<!-- ===== MODAL: OPERADOR ===== -->
+<div id="modal-operador" class="hidden fixed inset-0 z-[80] bg-black/85 flex items-center justify-center p-4">
+  <div class="bg-brand-card border border-brand-border rounded-2xl p-4 w-full max-w-sm space-y-3">
+    <div class="font-black text-base">Quem está registrando?</div>
+    <input id="input-operador-nome" placeholder="Seu nome" class="w-full bg-black/40 border border-brand-border rounded-xl px-3 py-3 outline-none font-bold">
+    <button id="btn-salvar-operador" class="w-full min-h-[46px] rounded-xl bg-brand-orange text-black font-black">Começar</button>
+  </div>
+</div>
+
+<!-- ===== MODAL: CÂMERA ===== -->
+<div id="modal-camera" class="hidden fixed inset-0 z-[90] bg-black/95 flex items-center justify-center p-2">
+  <div class="w-full max-w-md bg-[#07111d] border border-brand-orange/50 rounded-2xl overflow-hidden flex flex-col max-h-[95vh]">
+    <div class="flex items-center justify-between gap-2 px-3 py-2.5 border-b border-brand-border bg-[#081421]">
+      <div class="font-black text-sm">Leitor por câmera</div>
+      <button id="btn-fechar-camera" class="text-[11px] font-black text-red-300 bg-red-500/10 border border-red-500/40 rounded-lg px-2.5 py-1.5">Fechar</button>
+    </div>
+    <div class="relative bg-black min-h-[280px] flex items-center justify-center">
+      <video id="camera-video" playsinline muted autoplay class="w-full max-h-[62vh] object-cover"></video>
+      <div id="camera-region" class="w-full min-h-[300px] hidden"></div>
+      <div class="absolute left-[7%] right-[7%] top-[38%] h-20 border-2 border-brand-orange rounded-xl pointer-events-none shadow-[0_0_0_999px_rgba(0,0,0,.35)]"></div>
+    </div>
+    <div id="camera-status" class="px-3 py-2 text-[11px] text-slate-300 bg-[#0b1420] border-t border-brand-border">Preparando câmera...</div>
+    <div class="grid grid-cols-2 gap-2 p-3 bg-[#07111d]">
+      <button id="btn-flip-camera" class="min-h-[42px] rounded-xl bg-brand-card2 border border-brand-border font-bold text-xs">Alternar câmera</button>
+      <button id="btn-foto-camera" class="min-h-[42px] rounded-xl bg-brand-orange text-black font-bold text-xs">Tirar foto do código</button>
+    </div>
+  </div>
+</div>
+<input id="input-foto-camera" type="file" accept="image/*" capture="environment" class="hidden">
+
+<div id="toast-box" class="fixed z-[999] left-1/2 -translate-x-1/2 top-3 w-[92%] max-w-sm space-y-2 pointer-events-none"></div>
+
+<script>
+(function(){
+'use strict';
+
+const GALPOES = <?!= JSON.stringify(galpoes) ?>;
+const $ = id => document.getElementById(id);
+
+function safeGet(key){ try{ return localStorage.getItem(key); }catch(_){ return null; } }
+function safeSet(key, val){ try{ localStorage.setItem(key, val); }catch(_){} }
+
+const state = {
+  operador: JSON.parse(safeGet('estoque_operador') || 'null'),
+  scanTarget: null,
+  facingMode: 'environment',
+  html5: null, nativeStream: null, nativeDetector: null, nativeTimer: null,
+  lastScan: { code:'', at:0 }
+};
+
+function esc(v){ return String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c])); }
+function normalizeCode(v){ return String(v ?? '').trim().toUpperCase().replace(/\s+/g,''); }
+function vibrate(ms){ try{ if(navigator.vibrate) navigator.vibrate(ms); }catch(_){} }
+
+function toast(msg, type){
+  const colors = { info:'bg-sky-500/15 border-sky-500/40 text-sky-200', ok:'bg-emerald-500/15 border-emerald-500/40 text-emerald-200', warn:'bg-yellow-500/15 border-yellow-500/40 text-yellow-200', error:'bg-red-500/15 border-red-500/40 text-red-200' };
+  const el = document.createElement('div');
+  el.className = `toast-enter pointer-events-auto border rounded-xl px-3 py-2.5 text-xs font-bold shadow-lg backdrop-blur ${colors[type]||colors.info}`;
+  el.textContent = msg;
+  $('toast-box').appendChild(el);
+  setTimeout(()=>{ el.style.opacity='0'; el.style.transform='translateY(-6px)'; el.style.transition='all .25s'; setTimeout(()=>el.remove(),260); }, 3200);
+}
+
+/* ---------- operador ---------- */
+function ensureOperador(){
+  if(state.operador && state.operador.nome){ $('operador-nome').textContent = state.operador.nome; return; }
+  $('modal-operador').classList.remove('hidden');
+}
+$('btn-operador').addEventListener('click', () => $('modal-operador').classList.remove('hidden'));
+$('btn-salvar-operador').addEventListener('click', () => {
+  const nome = $('input-operador-nome').value.trim();
+  if(!nome){ toast('Digite seu nome','warn'); return; }
+  state.operador = { nome };
+  safeSet('estoque_operador', JSON.stringify(state.operador));
+  $('operador-nome').textContent = nome;
+  $('modal-operador').classList.add('hidden');
+});
+
+/* ---------- tabs ---------- */
+document.querySelectorAll('.tab-btn').forEach(btn => btn.addEventListener('click', () => switchTab(btn.dataset.tab)));
+function switchTab(tab){
+  document.querySelectorAll('.view-panel').forEach(v => v.classList.add('hidden'));
+  $('view-' + tab).classList.remove('hidden');
+  document.querySelectorAll('.tab-btn').forEach(b => {
+    const active = b.dataset.tab === tab;
+    b.className = 'tab-btn min-h-[38px] rounded-xl text-[11px] font-black ' + (active ? 'bg-brand-orange text-black' : 'bg-brand-card text-slate-300 border border-brand-border');
+  });
+  if(tab === 'baixo') carregarBaixoEstoque();
+}
+
+/* ---------- galpões ---------- */
+function fillGalpoes(){
+  const sel = $('reg-galpao');
+  GALPOES.forEach(g => { const o=document.createElement('option'); o.value=g; o.textContent=g; sel.appendChild(o); });
+}
+
+/* ---------- registrar ---------- */
+let lookupTimer = null;
+$('reg-sku').addEventListener('input', () => {
+  clearTimeout(lookupTimer);
+  const sku = $('reg-sku').value.trim();
+  if(!sku){ $('reg-conhecido').classList.add('hidden'); $('reg-foto').classList.add('hidden'); return; }
+  lookupTimer = setTimeout(() => {
+    google.script.run.withSuccessHandler(res => {
+      if(res && res.foto){ $('reg-foto').src = res.foto; $('reg-foto').classList.remove('hidden'); }
+      else { $('reg-foto').classList.add('hidden'); }
+
+      if(res && res.encontrado){
+        $('reg-conhecido').textContent = res.quantidadeTotal > 0
+          ? `🕘 Já conhecido: ${res.quantidadeTotal} un. em ${res.locais || '--'}`
+          : `📄 Produto encontrado no Tiny — ainda sem local registrado`;
+        $('reg-conhecido').classList.remove('hidden');
+        if(!$('reg-desc').value) $('reg-desc').value = res.descricao || '';
+      } else {
+        $('reg-conhecido').classList.add('hidden');
+      }
+    }).apiConsultar(sku);
+  }, 400);
+});
+
+$('btn-registrar').addEventListener('click', () => {
+  if(!state.operador){ ensureOperador(); return; }
+  const payload = {
+    sku: $('reg-sku').value.trim(),
+    descricao: $('reg-desc').value.trim(),
+    galpao: $('reg-galpao').value,
+    local: $('reg-local').value.trim(),
+    quantidade: Number($('reg-qtd').value || 0),
+    operador: state.operador.nome
+  };
+  if(!payload.sku){ toast('Informe o SKU','warn'); return; }
+  if(!payload.local){ toast('Informe o local','warn'); return; }
+  if(payload.quantidade <= 0){ toast('Informe a quantidade','warn'); return; }
+
+  $('btn-registrar').disabled = true;
+  $('btn-registrar').textContent = 'Salvando...';
+  google.script.run
+    .withSuccessHandler(res => {
+      $('btn-registrar').disabled = false;
+      $('btn-registrar').textContent = '✔ Registrar';
+      if(!res || !res.ok){ toast((res && res.error) || 'Erro ao salvar', 'error'); return; }
+      toast('Estoque registrado!', 'ok');
+      vibrate(90);
+      const loc = res.localizacao || {};
+      $('reg-resultado').classList.remove('hidden');
+      $('reg-resultado').innerHTML = `
+        ${loc.foto ? `<img src="${esc(loc.foto)}" class="w-full max-h-40 object-contain rounded-lg bg-black/30 mb-2" alt="Foto do produto">` : ''}
+        <div class="font-black text-sm">${esc(loc.sku||payload.sku)}</div>
+        <div class="text-[11px] text-slate-400">${esc(loc.descricao||payload.descricao)}</div>
+        <div class="text-[11px] text-emerald-300 mt-1">Total agora: ${esc(loc.quantidadeTotal)} un.</div>
+        <div class="text-[10px] text-slate-500 mt-0.5">${esc(loc.locais||'')}</div>`;
+      $('reg-sku').value = ''; $('reg-desc').value = ''; $('reg-local').value = ''; $('reg-qtd').value = '';
+      $('reg-conhecido').classList.add('hidden');
+      $('reg-foto').classList.add('hidden');
+    })
+    .withFailureHandler(err => {
+      $('btn-registrar').disabled = false;
+      $('btn-registrar').textContent = '✔ Registrar';
+      toast('Erro: ' + (err.message||err), 'error');
+    })
+    .apiRegistrar(payload);
+});
+
+/* ---------- consultar ---------- */
+$('btn-buscar').addEventListener('click', buscarConsulta);
+$('con-sku').addEventListener('keydown', e => { if(e.key==='Enter'){ e.preventDefault(); buscarConsulta(); } });
+
+function buscarConsulta(){
+  const sku = $('con-sku').value.trim();
+  if(!sku) return;
+  $('con-resultado').innerHTML = `<div class="text-center text-slate-500 text-xs p-4">Buscando...</div>`;
+  google.script.run.withSuccessHandler(res => renderConsulta(sku, res)).apiConsultar(sku);
+}
+
+function renderConsulta(sku, res){
+  if(!res || !res.encontrado){
+    $('con-resultado').innerHTML = `<div class="text-center text-slate-500 text-xs border border-dashed border-brand-border rounded-xl p-6">Nenhum registro para "${esc(sku)}" ainda.</div>`;
+    return;
+  }
+  const statusLabel = res.status === 'BAIXO' ? 'Estoque baixo' : (res.status === 'SEM_REGISTRO' ? 'Sem local registrado' : 'OK');
+  const statusClasse = res.status === 'BAIXO' ? 'bg-red-500/10 text-red-300 border border-red-500/30'
+    : (res.status === 'SEM_REGISTRO' ? 'bg-yellow-500/10 text-yellow-300 border border-yellow-500/30' : 'bg-slate-500/10 text-slate-300 border border-slate-500/30');
+  $('con-resultado').innerHTML = `
+    <div class="bg-brand-card border border-brand-border rounded-xl p-3 space-y-2">
+      ${res.foto ? `<img src="${esc(res.foto)}" class="w-full max-h-48 object-contain rounded-lg bg-black/30" alt="Foto do produto">` : ''}
+      <div class="font-black text-base">${esc(res.sku)}</div>
+      <div class="text-xs text-slate-400">${esc(res.descricao||'')}</div>
+      <div class="flex flex-wrap gap-1.5">
+        <span class="tag-pill bg-emerald-500/10 text-emerald-300 border border-emerald-500/30">Total: ${esc(res.quantidadeTotal)} un.</span>
+        <span class="tag-pill ${statusClasse}">${statusLabel}</span>
+      </div>
+      <div class="text-[11px] text-slate-400">${esc(res.locais||'--')}</div>
+      <div class="pt-2 border-t border-brand-border">
+        <div class="text-[10px] text-slate-500 font-bold uppercase mb-1">Estoque mínimo</div>
+        <div class="flex gap-2">
+          <input id="con-minimo" type="number" min="0" value="${esc(res.estoqueMinimo||0)}" class="flex-1 bg-black/40 border border-brand-border rounded-xl px-3 py-2.5 font-bold outline-none">
+          <button id="btn-salvar-minimo" class="px-3 rounded-xl bg-brand-blue text-black font-bold text-xs">Salvar</button>
+        </div>
+      </div>
+    </div>`;
+  $('btn-salvar-minimo').addEventListener('click', () => {
+    const minimo = Number($('con-minimo').value || 0);
+    google.script.run.withSuccessHandler(r => {
+      if(r && r.ok){ toast('Mínimo atualizado', 'ok'); buscarConsulta(); }
+      else toast((r && r.error) || 'Erro', 'error');
+    }).apiDefinirMinimo(res.sku, minimo);
+  });
+}
+
+/* ---------- baixo estoque ---------- */
+$('btn-refresh-baixo').addEventListener('click', carregarBaixoEstoque);
+function carregarBaixoEstoque(){
+  $('lista-baixo').innerHTML = `<div class="text-center text-slate-500 text-xs p-4">Carregando...</div>`;
+  google.script.run.withSuccessHandler(itens => {
+    if(!itens || !itens.length){
+      $('lista-baixo').innerHTML = `<div class="text-center text-slate-500 text-xs border border-dashed border-brand-border rounded-xl p-6">Nenhum item abaixo do mínimo.</div>`;
+      return;
+    }
+    $('lista-baixo').innerHTML = itens.map(i => `
+      <div class="bg-brand-card border border-brand-red/40 rounded-xl p-3">
+        <div class="font-black text-sm">${esc(i.sku)}</div>
+        <div class="text-[11px] text-slate-400">${esc(i.descricao||'')}</div>
+        <div class="text-[10px] text-slate-500 mt-1">Tem ${esc(i.quantidadeTotal)} · Mínimo ${esc(i.estoqueMinimo)} · Faltam ${esc(i.faltam)}</div>
+      </div>`).join('');
+  }).apiBaixoEstoque();
+}
+
+/* ---------- câmera (mesmo padrão validado do Picking) ---------- */
+function isIOS(){ return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1); }
+function cameraSetStatus(t){ $('camera-status').textContent = t||''; }
+function html5Formats(){
+  const f = window.Html5QrcodeSupportedFormats;
+  if(!f) return undefined;
+  return [f.QR_CODE,f.CODE_128,f.CODE_39,f.CODE_93,f.EAN_13,f.EAN_8,f.ITF,f.CODABAR,f.UPC_A,f.UPC_E,f.DATA_MATRIX,f.PDF_417].filter(v=>v!=null);
+}
+
+$('btn-cam-sku').addEventListener('click', () => openCamera('sku'));
+$('btn-cam-local').addEventListener('click', () => openCamera('local'));
+$('btn-cam-consulta').addEventListener('click', () => openCamera('consulta'));
+$('btn-fechar-camera').addEventListener('click', () => closeCamera(true));
+$('btn-foto-camera').addEventListener('click', () => $('input-foto-camera').click());
+$('btn-flip-camera').addEventListener('click', async () => {
+  state.facingMode = state.facingMode==='environment' ? 'user' : 'environment';
+  const t = state.scanTarget;
+  await closeCamera(false);
+  await openCamera(t);
+});
+$('input-foto-camera').addEventListener('change', async e => {
+  const file = e.target.files[0]; e.target.value='';
+  if(file) await decodeImageFile(file);
+});
+
+async function openCamera(target){
+  state.scanTarget = target;
+  $('modal-camera').classList.remove('hidden');
+  cameraSetStatus('Preparando leitor...');
+  try{
+    if(isIOS()){
+      await startHtml5Live();
+      return;
+    }
+    try{
+      cameraSetStatus('Solicitando permissão da câmera...');
+      const ok = await startNativeGetUserMedia();
+      if(ok) return;
+    }catch(_){ await stopNativeOnly(); }
+    await startHtml5Live();
+  }catch(err){
+    cameraSetStatus('Erro ao abrir câmera: ' + (err.message||err));
+  }
+}
+
+async function startNativeGetUserMedia(){
+  const video = $('camera-video');
+  $('camera-region').classList.add('hidden'); video.classList.remove('hidden');
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return false;
+  const stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:{ideal:state.facingMode}, width:{ideal:1280}, height:{ideal:720} }, audio:false });
+  state.nativeStream = stream; video.srcObject = stream; await video.play();
+  if(!('BarcodeDetector' in window)) throw new Error('BarcodeDetector indisponível');
+  let formats = ['qr_code','code_128','code_39','code_93','ean_13','ean_8','itf','codabar','data_matrix','pdf417','upc_a','upc_e'];
+  if(window.BarcodeDetector.getSupportedFormats){
+    const supported = await window.BarcodeDetector.getSupportedFormats();
+    formats = formats.filter(f => supported.includes(f));
+  }
+  state.nativeDetector = new BarcodeDetector({ formats: formats.length?formats:undefined });
+  cameraSetStatus('Câmera ativa. Centralize o código.');
+  const tick = async () => {
+    if(!state.nativeDetector) return;
+    try{ const codes = await state.nativeDetector.detect(video); if(codes && codes.length){ onCameraCode(codes[0].rawValue||''); return; } }catch(_){}
+    state.nativeTimer = setTimeout(tick, 160);
+  };
+  tick();
+  return true;
+}
+
+async function startHtml5Live(){
+  if(!window.Html5Qrcode) return false;
+  const video = $('camera-video'); const region = $('camera-region');
+  video.classList.add('hidden'); region.classList.remove('hidden'); region.innerHTML='';
+  const config = { fps: isIOS()?8:12, qrbox:(w,h)=>({width:Math.max(220,Math.floor(Math.min(w*.88,420))),height:Math.max(90,Math.floor(Math.min(h*.28,150)))}), aspectRatio:1.7777778 };
+  const formats = html5Formats();
+  state.html5 = new Html5Qrcode('camera-region', { verbose:false, experimentalFeatures:{ useBarCodeDetectorIfSupported:false }, ...(formats?{formatsToSupport:formats}:{}) });
+  cameraSetStatus(isIOS() ? 'iPhone detectado. Carregando leitor compatível...' : 'Carregando leitor...');
+  const attempts = [{facingMode:state.facingMode},{facingMode:{ideal:state.facingMode}}];
+  let lastError = null;
+  for(const cfg of attempts){
+    try{
+      await state.html5.start(cfg, config, text => onCameraCode(text), () => {});
+      cameraSetStatus('Câmera ativa. Aproxime o código.');
+      return true;
+    }catch(err){ lastError = err; try{ if(state.html5.isScanning) await state.html5.stop(); }catch(_){} }
+  }
+  const errName = lastError && (lastError.name||lastError.code||'');
+  cameraSetStatus(`Câmera não iniciou${errName?' ('+errName+')':''}. Use "Tirar foto do código".`);
+  return false;
+}
+
+async function decodeImageFile(file){
+  if(!window.Html5Qrcode){ toast('Leitor de foto não carregado','error'); return; }
+  cameraSetStatus('Lendo foto...');
+  let holder = document.getElementById('estoque-photo-reader');
+  if(!holder){ holder=document.createElement('div'); holder.id='estoque-photo-reader'; holder.style.display='none'; document.body.appendChild(holder); }
+  const formats = html5Formats();
+  const reader = new Html5Qrcode('estoque-photo-reader', { verbose:false, experimentalFeatures:{useBarCodeDetectorIfSupported:false}, ...(formats?{formatsToSupport:formats}:{}) });
+  try{
+    const text = await reader.scanFile(file, true);
+    try{ await reader.clear(); }catch(_){}
+    onCameraCode(text);
+  }catch(e){ toast('Não consegui ler o código da foto.', 'error'); }
+}
+
+function onCameraCode(raw){
+  const code = normalizeCode(raw);
+  if(!code) return;
+  const now = Date.now();
+  if(state.lastScan.code===code && (now-state.lastScan.at)<1500) return;
+  state.lastScan = { code, at: now };
+  vibrate(70);
+  const target = state.scanTarget;
+  closeCamera(true);
+  setTimeout(() => {
+    if(target === 'sku'){ $('reg-sku').value = code; $('reg-sku').dispatchEvent(new Event('input')); }
+    else if(target === 'local'){ $('reg-local').value = code; }
+    else if(target === 'consulta'){ $('con-sku').value = code; buscarConsulta(); }
+  }, 100);
+}
+
+async function stopNativeOnly(){
+  if(state.nativeTimer){ clearTimeout(state.nativeTimer); state.nativeTimer=null; }
+  state.nativeDetector = null;
+  try{ if(state.nativeStream){ state.nativeStream.getTracks().forEach(t=>t.stop()); state.nativeStream=null; } }catch(_){}
+  const video = $('camera-video'); if(video) video.srcObject = null;
+}
+async function closeCamera(hide){
+  await stopNativeOnly();
+  try{ if(state.html5 && state.html5.isScanning) await state.html5.stop(); }catch(_){}
+  try{ if(state.html5) await state.html5.clear(); }catch(_){}
+  state.html5 = null;
+  $('camera-region').innerHTML=''; $('camera-region').classList.add('hidden');
+  $('camera-video').classList.remove('hidden');
+  if(hide) $('modal-camera').classList.add('hidden');
+}
+
+/* ---------- boot ---------- */
+fillGalpoes();
+ensureOperador();
+switchTab('registrar');
+})();
+</script>
+</body>
+</html>
