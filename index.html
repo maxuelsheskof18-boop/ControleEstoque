@@ -2,6 +2,9 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<meta name="theme-color" content="#05070a">
+<link rel="icon" href="data:,">
 <title>Controle de Estoque — Vesco</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script>
@@ -150,11 +153,25 @@
 (function(){
 'use strict';
 
-const GALPOES = <?!= JSON.stringify(galpoes) ?>;
+// Página standalone: fala com o Apps Script só por HTTP (fetch), então funciona
+// hospedada em qualquer lugar (Vercel, Netlify, etc.), não só dentro do Apps Script.
+const ESTOQUE_API_URL = 'https://script.google.com/macros/s/AKfycbwpxupsuLeD2Luo1GjbCItZI3hQTrXdXJv5SCfNSUTr9m9eQqiEgksJ5SrEQY7QwaQo/exec';
+const GALPOES = ['Leopoldo', '21 de Abril', 'Cesário'];
 const $ = id => document.getElementById(id);
 
 function safeGet(key){ try{ return localStorage.getItem(key); }catch(_){ return null; } }
 function safeSet(key, val){ try{ localStorage.setItem(key, val); }catch(_){} }
+
+// Tudo via GET (mesmo pra "escrever"): o Apps Script redireciona toda chamada
+// (302), e o fetch() do navegador converte POST em GET automaticamente ao
+// seguir esse redirecionamento — perderia o corpo do POST no caminho. GET com
+// os dados na querystring evita esse problema por completo.
+async function apiCall(params){
+  const qs = new URLSearchParams(params).toString();
+  const resp = await fetch(`${ESTOQUE_API_URL}?${qs}`);
+  if(!resp.ok) throw new Error('HTTP ' + resp.status);
+  return resp.json();
+}
 
 const state = {
   operador: JSON.parse(safeGet('estoque_operador') || 'null'),
@@ -216,25 +233,27 @@ $('reg-sku').addEventListener('input', () => {
   clearTimeout(lookupTimer);
   const sku = $('reg-sku').value.trim();
   if(!sku){ $('reg-conhecido').classList.add('hidden'); $('reg-foto').classList.add('hidden'); return; }
-  lookupTimer = setTimeout(() => {
-    google.script.run.withSuccessHandler(res => {
-      if(res && res.foto){ $('reg-foto').src = res.foto; $('reg-foto').classList.remove('hidden'); }
-      else { $('reg-foto').classList.add('hidden'); }
+  lookupTimer = setTimeout(async () => {
+    let res;
+    try{ res = await apiCall({ action: 'localizacao', sku }); }
+    catch(err){ console.warn('Consulta falhou:', err); return; }
 
-      if(res && res.encontrado){
-        $('reg-conhecido').textContent = res.quantidadeTotal > 0
-          ? `🕘 Já conhecido: ${res.quantidadeTotal} un. em ${res.locais || '--'}`
-          : `📄 Produto encontrado no Tiny — ainda sem local registrado`;
-        $('reg-conhecido').classList.remove('hidden');
-        if(!$('reg-desc').value) $('reg-desc').value = res.descricao || '';
-      } else {
-        $('reg-conhecido').classList.add('hidden');
-      }
-    }).apiConsultar(sku);
+    if(res && res.foto){ $('reg-foto').src = res.foto; $('reg-foto').classList.remove('hidden'); }
+    else { $('reg-foto').classList.add('hidden'); }
+
+    if(res && res.encontrado){
+      $('reg-conhecido').textContent = res.quantidadeTotal > 0
+        ? `🕘 Já conhecido: ${res.quantidadeTotal} un. em ${res.locais || '--'}`
+        : `📄 Produto encontrado no Tiny — ainda sem local registrado`;
+      $('reg-conhecido').classList.remove('hidden');
+      if(!$('reg-desc').value) $('reg-desc').value = res.descricao || '';
+    } else {
+      $('reg-conhecido').classList.add('hidden');
+    }
   }, 400);
 });
 
-$('btn-registrar').addEventListener('click', () => {
+$('btn-registrar').addEventListener('click', async () => {
   if(!state.operador){ ensureOperador(); return; }
   const payload = {
     sku: $('reg-sku').value.trim(),
@@ -250,42 +269,44 @@ $('btn-registrar').addEventListener('click', () => {
 
   $('btn-registrar').disabled = true;
   $('btn-registrar').textContent = 'Salvando...';
-  google.script.run
-    .withSuccessHandler(res => {
-      $('btn-registrar').disabled = false;
-      $('btn-registrar').textContent = '✔ Registrar';
-      if(!res || !res.ok){ toast((res && res.error) || 'Erro ao salvar', 'error'); return; }
-      toast('Estoque registrado!', 'ok');
-      vibrate(90);
-      const loc = res.localizacao || {};
-      $('reg-resultado').classList.remove('hidden');
-      $('reg-resultado').innerHTML = `
-        ${loc.foto ? `<img src="${esc(loc.foto)}" class="w-full max-h-40 object-contain rounded-lg bg-black/30 mb-2" alt="Foto do produto">` : ''}
-        <div class="font-black text-sm">${esc(loc.sku||payload.sku)}</div>
-        <div class="text-[11px] text-slate-400">${esc(loc.descricao||payload.descricao)}</div>
-        <div class="text-[11px] text-emerald-300 mt-1">Total agora: ${esc(loc.quantidadeTotal)} un.</div>
-        <div class="text-[10px] text-slate-500 mt-0.5">${esc(loc.locais||'')}</div>`;
-      $('reg-sku').value = ''; $('reg-desc').value = ''; $('reg-local').value = ''; $('reg-qtd').value = '';
-      $('reg-conhecido').classList.add('hidden');
-      $('reg-foto').classList.add('hidden');
-    })
-    .withFailureHandler(err => {
-      $('btn-registrar').disabled = false;
-      $('btn-registrar').textContent = '✔ Registrar';
-      toast('Erro: ' + (err.message||err), 'error');
-    })
-    .apiRegistrar(payload);
+  try{
+    const res = await apiCall(Object.assign({ action: 'registrar' }, payload));
+    if(!res || !res.ok){ toast((res && res.error) || 'Erro ao salvar', 'error'); return; }
+    toast('Estoque registrado!', 'ok');
+    vibrate(90);
+    const loc = res.localizacao || {};
+    $('reg-resultado').classList.remove('hidden');
+    $('reg-resultado').innerHTML = `
+      ${loc.foto ? `<img src="${esc(loc.foto)}" class="w-full max-h-40 object-contain rounded-lg bg-black/30 mb-2" alt="Foto do produto">` : ''}
+      <div class="font-black text-sm">${esc(loc.sku||payload.sku)}</div>
+      <div class="text-[11px] text-slate-400">${esc(loc.descricao||payload.descricao)}</div>
+      <div class="text-[11px] text-emerald-300 mt-1">Total agora: ${esc(loc.quantidadeTotal)} un.</div>
+      <div class="text-[10px] text-slate-500 mt-0.5">${esc(loc.locais||'')}</div>`;
+    $('reg-sku').value = ''; $('reg-desc').value = ''; $('reg-local').value = ''; $('reg-qtd').value = '';
+    $('reg-conhecido').classList.add('hidden');
+    $('reg-foto').classList.add('hidden');
+  }catch(err){
+    toast('Erro: ' + (err.message||err), 'error');
+  }finally{
+    $('btn-registrar').disabled = false;
+    $('btn-registrar').textContent = '✔ Registrar';
+  }
 });
 
 /* ---------- consultar ---------- */
 $('btn-buscar').addEventListener('click', buscarConsulta);
 $('con-sku').addEventListener('keydown', e => { if(e.key==='Enter'){ e.preventDefault(); buscarConsulta(); } });
 
-function buscarConsulta(){
+async function buscarConsulta(){
   const sku = $('con-sku').value.trim();
   if(!sku) return;
   $('con-resultado').innerHTML = `<div class="text-center text-slate-500 text-xs p-4">Buscando...</div>`;
-  google.script.run.withSuccessHandler(res => renderConsulta(sku, res)).apiConsultar(sku);
+  try{
+    const res = await apiCall({ action: 'localizacao', sku });
+    renderConsulta(sku, res);
+  }catch(err){
+    $('con-resultado').innerHTML = `<div class="text-center text-red-400 text-xs p-4">Erro ao buscar: ${esc(err.message||err)}</div>`;
+  }
 }
 
 function renderConsulta(sku, res){
@@ -314,31 +335,40 @@ function renderConsulta(sku, res){
         </div>
       </div>
     </div>`;
-  $('btn-salvar-minimo').addEventListener('click', () => {
+  $('btn-salvar-minimo').addEventListener('click', async () => {
     const minimo = Number($('con-minimo').value || 0);
-    google.script.run.withSuccessHandler(r => {
+    try{
+      const r = await apiCall({ action: 'definirMinimo', sku: res.sku, minimo });
       if(r && r.ok){ toast('Mínimo atualizado', 'ok'); buscarConsulta(); }
       else toast((r && r.error) || 'Erro', 'error');
-    }).apiDefinirMinimo(res.sku, minimo);
+    }catch(err){
+      toast('Erro: ' + (err.message||err), 'error');
+    }
   });
 }
 
 /* ---------- baixo estoque ---------- */
 $('btn-refresh-baixo').addEventListener('click', carregarBaixoEstoque);
-function carregarBaixoEstoque(){
+async function carregarBaixoEstoque(){
   $('lista-baixo').innerHTML = `<div class="text-center text-slate-500 text-xs p-4">Carregando...</div>`;
-  google.script.run.withSuccessHandler(itens => {
-    if(!itens || !itens.length){
-      $('lista-baixo').innerHTML = `<div class="text-center text-slate-500 text-xs border border-dashed border-brand-border rounded-xl p-6">Nenhum item abaixo do mínimo.</div>`;
-      return;
-    }
-    $('lista-baixo').innerHTML = itens.map(i => `
-      <div class="bg-brand-card border border-brand-red/40 rounded-xl p-3">
-        <div class="font-black text-sm">${esc(i.sku)}</div>
-        <div class="text-[11px] text-slate-400">${esc(i.descricao||'')}</div>
-        <div class="text-[10px] text-slate-500 mt-1">Tem ${esc(i.quantidadeTotal)} · Mínimo ${esc(i.estoqueMinimo)} · Faltam ${esc(i.faltam)}</div>
-      </div>`).join('');
-  }).apiBaixoEstoque();
+  let itens;
+  try{
+    const data = await apiCall({ action: 'baixoEstoque' });
+    itens = (data && data.itens) || [];
+  }catch(err){
+    $('lista-baixo').innerHTML = `<div class="text-center text-red-400 text-xs p-4">Erro ao carregar: ${esc(err.message||err)}</div>`;
+    return;
+  }
+  if(!itens.length){
+    $('lista-baixo').innerHTML = `<div class="text-center text-slate-500 text-xs border border-dashed border-brand-border rounded-xl p-6">Nenhum item abaixo do mínimo.</div>`;
+    return;
+  }
+  $('lista-baixo').innerHTML = itens.map(i => `
+    <div class="bg-brand-card border border-brand-red/40 rounded-xl p-3">
+      <div class="font-black text-sm">${esc(i.sku)}</div>
+      <div class="text-[11px] text-slate-400">${esc(i.descricao||'')}</div>
+      <div class="text-[10px] text-slate-500 mt-1">Tem ${esc(i.quantidadeTotal)} · Mínimo ${esc(i.estoqueMinimo)} · Faltam ${esc(i.faltam)}</div>
+    </div>`).join('');
 }
 
 /* ---------- câmera (mesmo padrão validado do Picking) ---------- */
