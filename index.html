@@ -447,11 +447,7 @@ async function startHtml5Live(){
   const formats = html5Formats();
   state.html5 = new Html5Qrcode('camera-region', { verbose:false, experimentalFeatures:{ useBarCodeDetectorIfSupported:false }, ...(formats?{formatsToSupport:formats}:{}) });
   cameraSetStatus(isIOS() ? 'iPhone detectado. Carregando leitor compatível...' : 'Carregando leitor...');
-  const attempts = [
-    { facingMode: state.facingMode, width: { ideal: 1920 }, height: { ideal: 1080 } },
-    { facingMode: { ideal: state.facingMode }, width: { ideal: 1920 }, height: { ideal: 1080 } },
-    { facingMode: state.facingMode }
-  ];
+  const attempts = [{facingMode:state.facingMode},{facingMode:{ideal:state.facingMode}}];
   let lastError = null;
   for(const cfg of attempts){
     try{
